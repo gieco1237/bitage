@@ -91,20 +91,33 @@ class CryptoAPI:
     """
     @staticmethod
     def get_crypto_data(ticker):
-        """Fetches current price, ATH, and historical low for a given ticker."""
+        """
+        Fetches current price, ATH, date of ATH, and the lowest price since the ATH.
+        """
         try:
             stock = yf.Ticker(ticker)
+            # Get the full history once
             hist = stock.history(period="max")
             if hist.empty:
-                return None, None, None
-            
-            current_price = stock.history(period="1d")['Close'].iloc[-1]
+                return None, None, None, None
+
+            # Get data from the history dataframe
+            current_price = hist['Close'].iloc[-1]
             ath = hist['High'].max()
-            historical_low = hist['Low'].min()
-            return current_price, ath, historical_low
+            
+            # Find the date of the ATH
+            ath_date = hist['High'].idxmax()
+            
+            # Filter history from the ATH date onwards
+            hist_since_ath = hist.loc[ath_date:]
+            
+            # Find the lowest price in that period
+            low_since_ath = hist_since_ath['Low'].min()
+            
+            return current_price, ath, ath_date, low_since_ath
         except Exception as e:
             print(f"Error fetching data for {ticker}: {e}")
-            return None, None, None
+            return None, None, None, None
 
 class App(tk.Tk):
     """
@@ -256,9 +269,9 @@ class App(tk.Tk):
         self.details_text.insert(tk.END, f"--- {name} ({ticker}) ---\n\n", "h1")
         self.details_text.insert(tk.END, f"ATH Manual (athv): {athv:,.2f} USD (Fecha: {athv_date})\n\n")
         
-        price, athn, historical_low = self.api.get_crypto_data(ticker)
+        price, athn, athn_date, low_since_ath = self.api.get_crypto_data(ticker)
         
-        # NEW: Detailed plan display
+        # Detailed plan display
         self.details_text.insert(tk.END, "--- Plan de Compra ---\n", "h2_plan")
         if price is not None:
             buy_plan_details = self._format_rules_display(buyplan, athn, 'buy-dca', 'ATHN')
@@ -272,17 +285,19 @@ class App(tk.Tk):
 
         self.details_text.insert(tk.END, "\n--- Análisis en Tiempo Real ---\n", "h2")
         
-        if price is None or athn is None or historical_low is None:
+        if price is None or athn is None or low_since_ath is None:
             self.details_text.insert(tk.END, f"No se pudo obtener la información para {ticker}.\n", "error")
         else:
-            # UPDATED: Corrected calculations and added new metric
-            current_drop_perc = ((athn - price) / athn) * 100
-            max_historical_drop_perc = ((athn - historical_low) / athn) * 100
+            # CORRECTED: Clarified calculations as per user feedback
+            price_as_perc_of_ath = (price / athn) * 100
+            current_drop_from_ath = ((athn - price) / athn) * 100
+            max_drop_from_ath = ((athn - low_since_ath) / athn) * 100
             
             self.details_text.insert(tk.END, f"Precio Actual (price): {price:,.2f} USD\n")
-            self.details_text.insert(tk.END, f"ATH Real Actual (athn): {athn:,.2f} USD\n")
-            self.details_text.insert(tk.END, f"Caída Actual vs ATH: {current_drop_perc:.2f}%\n", "bold")
-            self.details_text.insert(tk.END, f"Máxima Caída Histórica vs ATH: {max_historical_drop_perc:.2f}%\n\n", "bold_red")
+            self.details_text.insert(tk.END, f"ATH Real Actual (athn): {athn:,.2f} USD (Fecha: {athn_date.strftime('%Y-%m-%d')})\n")
+            self.details_text.insert(tk.END, f"Precio Actual sobre ATH: {price_as_perc_of_ath:.2f}%\n", "bold_green")
+            self.details_text.insert(tk.END, f"Descenso Actual desde ATH: {current_drop_from_ath:.2f}%\n", "bold")
+            self.details_text.insert(tk.END, f"Máximo Descenso desde ATH: {max_drop_from_ath:.2f}%\n\n", "bold_red")
             
             self.details_text.insert(tk.END, "--- Acciones Recomendadas ---\n", "h2")
             
@@ -329,6 +344,7 @@ class App(tk.Tk):
         self.details_text.tag_config("h2_plan", font=("Helvetica", 13, "bold"), foreground="#444444")
         self.details_text.tag_config("plan_text", font=("Courier", 11), lmargin1=10)
         self.details_text.tag_config("bold", font=("Helvetica", 11, "bold"))
+        self.details_text.tag_config("bold_green", font=("Helvetica", 11, "bold"), foreground="#1E8449")
         self.details_text.tag_config("bold_red", font=("Helvetica", 11, "bold"), foreground="#C0392B")
         self.details_text.tag_config("error", foreground="red")
         self.details_text.tag_config("buy", foreground="#27AE60", font=("Helvetica", 11, "bold"))
@@ -348,14 +364,14 @@ class App(tk.Tk):
         self.details_text.insert(tk.END, f"--- {name} ({ticker}) ---\n\n", "h1")
         self.details_text.insert(tk.END, f"Precio de Compra: {precio_compra:,.2f} USD\n\n")
 
-        # NEW: Detailed plan display
+        # Detailed plan display
         self.details_text.insert(tk.END, "--- Plan de Venta ---\n", "h2_plan")
         sell_plan_details = self._format_rules_display(sellplan, precio_compra, 'sell-pips', 'Precio Compra')
         self.details_text.insert(tk.END, sell_plan_details, "plan_text")
 
         self.details_text.insert(tk.END, "\n--- Análisis en Tiempo Real ---\n", "h2")
 
-        price, _, _ = self.api.get_crypto_data(ticker)
+        price, _, _, _ = self.api.get_crypto_data(ticker)
 
         if price is None:
             self.details_text.insert(tk.END, f"No se pudo obtener la información para {ticker}.\n", "error")
