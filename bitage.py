@@ -365,7 +365,23 @@ class App(tk.Tk):
             
             # Buy logic
             buy_action = "Ninguna acción de compra."
-            # ... (buy logic remains the same)
+            if buyplan:
+                rules = buyplan.split(';')
+                for rule in rules:
+                    parts = rule.strip().split(',')
+                    try:
+                        if len(parts) == 2:
+                            target_perc, amount = float(parts[0]), float(parts[1])
+                            if price <= athn * target_perc:
+                                buy_action = f"COMPRAR {amount}€ (Precio <= {athn * target_perc:,.2f} USD)"
+                                break
+                        elif len(parts) == 3:
+                            upper_perc, lower_perc, amount = float(parts[0]), float(parts[1]), float(parts[2])
+                            if athn * lower_perc <= price <= athn * upper_perc:
+                                buy_action = f"COMPRAR {amount}€ (Precio entre {athn * lower_perc:,.2f} y {athn * upper_perc:,.2f} USD)"
+                                break
+                    except (ValueError, IndexError):
+                        continue
             self._pack_label(f"Compra: {buy_action}", "buy")
             
             # Sell logic with disabled check
@@ -375,13 +391,14 @@ class App(tk.Tk):
                 rules = sellplan.split(';')
                 for i, rule in enumerate(rules):
                     if i in disabled_indices: continue # Skip disabled rule
-                    parts = rule.split(',')
+                    parts = rule.strip().split(',')
                     try:
-                        target_perc, position_perc = float(parts[0]), float(parts[1])
-                        if price >= athv * target_perc:
-                            sell_action = f"VENDER {position_perc}% de la posición (Precio >= {athv * target_perc:,.2f} USD)"
-                            break
-                    except ValueError: continue
+                        if len(parts) == 2:
+                            target_perc, position_perc = float(parts[0]), float(parts[1])
+                            if price >= athv * target_perc:
+                                sell_action = f"VENDER {position_perc}% de la posición (Precio >= {athv * target_perc:,.2f} USD)"
+                                break
+                    except (ValueError, IndexError): continue
             self._pack_label(f"Venta: {sell_action}", "sell")
 
     def display_cryptopips_details(self, plan_id):
@@ -414,19 +431,22 @@ class App(tk.Tk):
             ttk.Separator(self.details_content_frame, orient='horizontal').pack(fill='x', pady=10)
             self._pack_label("Acciones Recomendadas", "h2")
             
+            # CORRECTED: Sell logic for Cryptopips
             sell_action = "Ninguna acción de venta."
             disabled_indices = [int(i) for i in sellplan_disabled.split(';') if i]
             if sellplan:
                 rules = sellplan.split(';')
                 for i, rule in enumerate(rules):
                     if i in disabled_indices: continue
+                    parts = rule.strip().split(',')
                     try:
-                        target_multiplier, position_perc = float(parts[0]), float(parts[1])
-                        target_price = precio_compra * target_multiplier
-                        if price >= target_price:
-                            sell_action = f"VENDER {position_perc}% de la posición (Precio >= {target_price:,.2f} USD)"
-                            break
-                    except ValueError: continue
+                        if len(parts) == 2:
+                            target_multiplier, position_perc = float(parts[0]), float(parts[1])
+                            target_price = precio_compra * target_multiplier
+                            if price >= target_price:
+                                sell_action = f"VENDER {position_perc}% de la posición (Precio >= {target_price:,.2f} USD)"
+                                break
+                    except (ValueError, IndexError): continue
             self._pack_label(f"Venta: {sell_action}", "sell")
 
     def add_plan(self):
